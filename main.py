@@ -1,8 +1,16 @@
 #! /usr/bin/env python
 
+import os
 import time
 import random
+from sys import platform
 from threading import Timer
+
+
+if platform == "win32":
+    CLEAR_COMMAND = 'cls'
+else:
+    CLEAR_COMMAND = 'clear'
 
 
 FPS                 = 60
@@ -31,14 +39,13 @@ class Robot:
     def __init__(self):
         self.events = []
         self.busy   = False
-        self.work   = 'foo'
+        self.work   = None
 
-        self.times_worked_current = 0
 
     def foo(self, state):
         def action():
             state['foo'] += 1
-            print('foo')
+            # print('foo')
 
         self._schedule_event(
             'foo',
@@ -49,7 +56,7 @@ class Robot:
     def bar(self, state):
         def action():
             state['bar'] += 1
-            print('bar')
+            # print('bar')
 
         duration = round(random.uniform(0.5, 2.0), 1)
         self._schedule_event(
@@ -71,7 +78,7 @@ class Robot:
             else:
                 state['bar'] += 1
 
-            print('foobar')
+            # print('foobar')
 
         self._schedule_event(
             'foobar',
@@ -80,13 +87,14 @@ class Robot:
         )
 
     def _change_jobs(self, job, state):
+        self.work = 'changing'
+
         def action():
             previous_work = self.work
 
             self.work = job
-            self.times_worked_current = 0
 
-            print(f'switched job from {previous_work} to {self.work}')
+            # print(f'switched job from {previous_work} to {self.work}')
 
         self.events.append(Event(10, action))
 
@@ -97,7 +105,7 @@ class Robot:
             state['money'] += 5
 
         self._schedule_event(
-            'sell',
+            'selling',
             Event(10, action),
             state
         )
@@ -122,7 +130,6 @@ class Robot:
 
     def _after_action(self):
         self.busy = False
-        self.times_worked_current += 1
 
     def _schedule_event(self, name, event, state):
         if self.work != name:
@@ -168,14 +175,8 @@ class Game:
         for running in self.running_events:
             running.cancel()
 
-        print('State at the end of the game:')
-        print({
-            'robots_count': len(self.state['robots']),
-            'foo':          self.state['foo'],
-            'bar':          self.state['bar'],
-            'foobar':       self .state['foobar'],
-            'money':        self.state['money']
-        })
+        self._refresh_display()
+        print('Finished!')
 
     def _game(self, dt):
         # Start moving robots to shopping if enough resources are
@@ -206,6 +207,8 @@ class Game:
             else:
                 robot.foo(self.state)
 
+        self._refresh_display()
+
         if self._win_condition():
             return
 
@@ -215,19 +218,39 @@ class Game:
                 task = event.run(dt)
                 self.running_events.append(task)
 
-        print({
-            'robots_count': len(self.state['robots']),
-            'foo':          self.state['foo'],
-            'bar':          self.state['bar'],
-            'foobar':       self .state['foobar'],
-            'money':        self.state['money']
-        })
-
     def _win_condition(self):
         return len(self.state['robots']) >= 30
 
     def _available_robots(self):
         return [r for r in self.state['robots'] if not r.busy]
+
+    def _worker_count(self, job):
+        return len([r for r in self.state['robots'] if r.work == job])
+
+    def _refresh_display(self):
+        total_robots = len(self.state['robots'])
+        foo          = self._worker_count('foo')
+        bar          = self._worker_count('bar')
+        foobar       = self._worker_count('foobar')
+        shopping     = self._worker_count('shopping')
+        selling      = self._worker_count('selling')
+        changing     = self._worker_count('changing')
+
+        os.system(CLEAR_COMMAND)
+        print(f'Total robots: {total_robots}')
+        print(f'Mining foo: {foo}')
+        print(f'Mining bar: {bar}')
+        print(f'Mining foobar: {foobar}')
+        print(f'Shopping: {shopping}')
+        print(f'Selling foobars: {selling}')
+        print(f'Changing jobs: {changing}\n')
+
+        print({
+            'foo':    self.state['foo'],
+            'bar':    self.state['bar'],
+            'foobar': self.state['foobar'],
+            'money':  self.state['money']
+        })
 
 
 INITIAL_GAME_STATE = [Robot(), Robot()]
