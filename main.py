@@ -5,126 +5,136 @@ import random
 from threading import Timer
 
 
-FPS                 = 1
+FPS                 = 60
 TIME_FACTOR         = .1
 FOOBAR_SUCCESS_RATE = 0.6
 
 
 class Event:
-    def __init__(self, duration, action):
+    def __init__(self, duration, action, on_after=None):
         self.duration = duration * TIME_FACTOR
         self.action   = action
+        self.on_after = on_after
 
     def run(self, dt):
-        timer = Timer(self.duration, self.action)
+        def run():
+            self.action()
+            if self.on_after is not None:
+                self.on_after()
+
+        timer = Timer(self.duration, run)
         timer.start()
+        return timer
 
 
 class Robot:
     def __init__(self):
-        self.busy = False
-        self.work = 'mining'
+        self.events = []
+        self.busy   = False
+        self.work   = 'foo'
+
         self.times_worked_current = 0
 
     def foo(self, state):
-        self.busy = True
-        self.times_worked_current += 1
-
         def action():
             state['foo'] += 1
-            self._cleanup()
             print('foo')
 
-        return Event(1, action)
-
+        self._schedule_event(
+            'foo',
+            Event(1, action, self._after_action),
+            state
+        )
 
     def bar(self, state):
-        self.busy = True
-        self.times_worked_current += 1
-
-        duration = round(random.uniform(0.5, 2.0), 1)
-
         def action():
             state['bar'] += 1
-            self._cleanup()
             print('bar')
 
-        return Event(duration, action)
-
+        duration = round(random.uniform(0.5, 2.0), 1)
+        self._schedule_event(
+            'bar',
+            Event(duration, action, self._after_action),
+            state
+        )
 
     def foobar(self, state):
-        duration = 2
-        self.times_worked_current += 1
+        # Only ever remove items in synchronous actions.
+        state['foo'] -= 1
+        state['bar'] -= 1
 
         def action():
             success = random.uniform(0., 1.0)
+
             if success > FOOBAR_SUCCESS_RATE:
-                if state['foo'] > 0:
-                    state['foo'] -= 1
-                    state['bar'] -= 1
-                    state['foobar'] += 1
-                    print('SUCCESS!!')
+                state['foobar'] += 1
             else:
-                if state['foo'] > 0:
-                    state['foo'] -= 1
-                    print('failure :(')
-            self._cleanup()
+                state['bar'] += 1
+
             print('foobar')
 
-        return Event(duration, action)
+        self._schedule_event(
+            'foobar',
+            Event(2, action, self._after_action),
+            state
+        )
 
-
-    def change_jobs(self, state):
+    def _change_jobs(self, job, state):
         def action():
             previous_work = self.work
 
-            self.work = 'shopping' if self.work == 'mining' else 'mining'
+            self.work = job
             self.times_worked_current = 0
 
             print(f'switched job from {previous_work} to {self.work}')
 
-        return Event(10, action)
+        self.events.append(Event(10, action))
 
+    def sell_foobars(self, state):
+        state['foobar'] -= 5
+
+        def action():
+            state['money'] += 5
+
+        self._schedule_event(
+            'sell',
+            Event(10, action),
+            state
+        )
 
     def buy_new_robot(self, state):
         # TODO: very ugly and just not the way I want it to work.
         if state['foo'] >= 6 and state['money'] >= 3:
-            state['foo'] -= 6
             state['money'] -= 3
+            state['foo']   -= 6
+
             spent_money = True
 
         def action():
             if spent_money:
                 state['robots'].append(Robot())
 
+        self._schedule_event(
+            'shopping',
+            Event(1, action, self._after_action),
+            state
+        )
+
+    def _after_action(self):
+        self.busy = False
         self.times_worked_current += 1
 
-        return Event(1, action)
+    def _schedule_event(self, name, event, state):
+        if self.work != name:
+            self._change_jobs(name, state)
 
-
-    def _cleanup(self):
-        self.busy = False
-
-
-class Market:
-    def __init__(self):
-        self.busy = False
-
-
-    def sell_foobars(self, state):
-        # TODO: sell continuously, somehow
-        def action():
-            if state['foobar'] >= 5:
-                state['foobar'] -= 5
-                state['money'] += 5
-
-        return Event(10, action)
+        self.events.append(event)
+        self.busy = True
 
 
 class Game:
     def __init__(self, initial_robots):
-        self.market = Market()
-        self.moves  = 0
+        self.running_events = []
 
         self.state = {
             'robots': initial_robots,
@@ -134,84 +144,87 @@ class Game:
             'money':  0
         }
 
-
     def run(self):
         last_frame_time = time.time()
 
         # simple game loop
-        while not self._winning_condition():
+        while not self._win_condition():
             current_time = time.time()
             dt = current_time - last_frame_time
             last_frame_time = current_time
 
             sleep_time = 1./FPS - (current_time - last_frame_time)
             if sleep_time > 0:
-                time.sleep(sleep_time * TIME_FACTOR)
+                time.sleep(sleep_time)
 
             self._game(dt * TIME_FACTOR)
+            self.running_events = [e for e in self.running_events if e.is_alive()]
+
+            assert self.state['foo'] >= 0
+            assert self.state['foo'] >= 0
+            assert self.state['foobar'] >= 0
+            assert self.state['money'] >= 0
+
+        for running in self.running_events:
+            running.cancel()
 
         print('State at the end of the game:')
-        print(self.state)
-        print(f'Finished in {self.moves} moves.')
-
+        print({
+            'robots_count': len(self.state['robots']),
+            'foo':          self.state['foo'],
+            'bar':          self.state['bar'],
+            'foobar':       self .state['foobar'],
+            'money':        self.state['money']
+        })
 
     def _game(self, dt):
-        events = []
-
-        # Start moving robots to shopping if there enough resources are
+        # Start moving robots to shopping if enough resources are
         # being collected.
         if self.state['money'] >= 3 and self.state['foo'] >= 6:
             shopping_robots = [r for r in self._available_robots() if r.work == 'shopping']
 
             if shopping_robots:
-                shopping_robot = shopping_robots[0]
-                event = shopping_robot.buy_new_robot(self.state)
-                events.append(event)
+                robot = shopping_robots[0]
             else:
                 robot = self.state['robots'][0]
-                event = robot.change_jobs(self.state)
-                events.append(event)
+
+            robot.buy_new_robot(self.state)
 
         # Handle mining here. Don't want the robots to get bored,
         # so switch them between jobs after enough turns doing the same work.
         for robot in self._available_robots():
-            if robot.work == 'shopping': continue
-
-            if robot.times_worked_current >= 10:
-                event = robot.change_jobs(self.state)
-                events.append(event)
+            if robot.work == 'shopping':
                 continue
 
-            # The numbers were chosen completely by trial-and-error.
-            if self.state['foo'] > 6 and self.state['bar'] > 6:
-                event = robot.foobar(self.state)
+            # A very elaborate fizzbuzz.
+            if self.state['foobar'] >= 10:
+                robot.sell_foobars(self.state)
+            elif self.state['foo'] > 6 and self.state['bar'] > 6:
+                robot.foobar(self.state)
             elif self.state['foo'] >= 10:
-                event = robot.bar(self.state)
+                robot.bar(self.state)
             else:
-                event = robot.foo(self.state)
+                robot.foo(self.state)
 
-            events.append(event)
-
-        # Sell, sell, sell.
-        if self.state['foobar'] >= 10 and (not self.market.busy):
-            event = self.market.sell_foobars(self.state)
-            events.append(event)
-
-        self.moves += 1
-
-        if self._winning_condition():
+        if self._win_condition():
             return
 
-        while len(events) > 0:
-            event = events.pop()
-            event.run(dt)
+        for robot in self.state['robots']:
+            if robot.events:
+                event = robot.events.pop(0)
+                task = event.run(dt)
+                self.running_events.append(task)
 
-        print(self.state)
+        print({
+            'robots_count': len(self.state['robots']),
+            'foo':          self.state['foo'],
+            'bar':          self.state['bar'],
+            'foobar':       self .state['foobar'],
+            'money':        self.state['money']
+        })
 
-
-    def _winning_condition(self):
+    def _win_condition(self):
         return len(self.state['robots']) >= 30
-
 
     def _available_robots(self):
         return [r for r in self.state['robots'] if not r.busy]
