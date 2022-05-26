@@ -3,6 +3,7 @@
 import os
 import time
 import random
+from enum import Enum
 from sys import platform
 from threading import Timer
 
@@ -26,7 +27,7 @@ class Event:
         self.on_after  = on_after
 
     def run(self):
-        # Use on before to set the Robot.busy to True
+        # Use on_before to set the Robot.busy to True
         # on run, instead of on creating the event.
         # This avoids the issue where multiple events are
         # started before busy is set to True, which is
@@ -43,18 +44,28 @@ class Event:
         return timer
 
 
+class RobotWork(Enum):
+    UNASSIGNED = 0
+    FOO = 1,
+    BAR = 2,
+    FOOBAR = 3
+    SHOPPING = 4,
+    SELLING = 5,
+    CHANGING = 6
+
+
 class Robot:
-    def __init__(self):
+    def __init__(self, initial_work=RobotWork.UNASSIGNED):
         self.events = []
         self.busy   = False
-        self.work   = 'foo'
+        self.work   = initial_work
 
     def foo(self, state):
         def action():
             state['foo'] += 1
 
         self._schedule_event(
-            'foo',
+            RobotWork.FOO,
             self._create_event(1, action),
             state
         )
@@ -65,7 +76,7 @@ class Robot:
 
         duration = round(random.uniform(0.5, 2.0), 1)
         self._schedule_event(
-            'bar',
+            RobotWork.BAR,
             self._create_event(duration, action),
             state
         )
@@ -84,7 +95,7 @@ class Robot:
                 state['bar'] += 1
 
         self._schedule_event(
-            'foobar',
+            RobotWork.FOOBAR,
             self._create_event(2, action),
             state
         )
@@ -97,7 +108,7 @@ class Robot:
                 state['money'] += 1
 
             self._schedule_event(
-                'selling',
+                RobotWork.SELLING,
                 self._create_event(2, action),
                 state
             )
@@ -110,16 +121,19 @@ class Robot:
             state['robots'].append(Robot())
 
         self._schedule_event(
-            'shopping',
+            RobotWork.SHOPPING,
             self._create_event(1, action),
             state
         )
 
-    def _change_jobs(self, job):
-        self.work = 'changing'
+    # All methods below are candidates for moving
+    # into a base class. Not doing that until needed.
+
+    def _change_work(self, work):
+        self.work = RobotWork.CHANGING
 
         def action():
-            self.work = job
+            self.work = work
 
         self.events.append(
             self._create_event(5, action)
@@ -136,7 +150,7 @@ class Robot:
 
     def _schedule_event(self, name, event, state):
         if self.work != name:
-            self._change_jobs(name)
+            self._change_work(name)
 
         self.events.append(event)
 
@@ -166,6 +180,8 @@ class Game:
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
+            # No graceful exit for you!
+
             self._game()
             self.running_events = [e for e in self.running_events if e.is_alive()]
             self._assert_state()
@@ -177,24 +193,11 @@ class Game:
         print('Finished!')
 
     def _game(self):
-        # Start moving robots to shopping if enough resources are
-        # being collected.
-        if self.state['money'] >= 3 and self.state['foo'] >= 6:
-            shopping_robots = [r for r in self._available_robots() if r.work == 'shopping']
-
-            if shopping_robots:
-                robot = shopping_robots[0]
-            else:
-                robot = self.state['robots'][0]
-
-            robot.buy_new_robot(self.state)
-
-        # Handle mining here. Don't want the robots to get bored,
-        # so switch them between jobs after enough turns doing the same work.
+        # TODO: the focus should be to have the smallest amount of work changes.
+        # Queue up the actions.
+        # Robot actions are maybe better defined as separate RobotBehavior
+        # or something similar, but trying to keep it simple here.
         for robot in self._available_robots():
-            if robot.work == 'shopping':
-                continue
-
             if robot.busy:
                 continue
 
@@ -202,7 +205,12 @@ class Game:
                 continue
 
             # Fizzbuzz!
-            if self.state['foobar'] >= 10:
+            # The values for the conditions were
+            # chosen completely arbitrarily.
+            # Hope softlocks are not possible!
+            if self.state['money'] >= 3 and self.state['foo'] >= 6:
+                robot.buy_new_robot(self.state)
+            elif self.state['foobar'] >= 5:
                 robot.sell_foobars(self.state)
             elif self.state['foo'] >= 8 and self.state['bar'] >= 2:
                 robot.foobar(self.state)
@@ -211,11 +219,18 @@ class Game:
             else:
                 robot.foo(self.state)
 
+        # TODO: not sure if it even makes sense to loop through
+        # robots twice.
+        # Execute the actions
         for robot in self.state['robots']:
             if robot.busy:
                 continue
 
             if robot.events:
+                # Treat robot events as a stack.
+                # Works well in case of changing work,
+                # WOrk change and the next work are pushed to the stack.
+                # First the work change will be executed, then the work.
                 event = robot.events.pop(0)
                 task = event.run()
                 self.running_events.append(task)
@@ -231,20 +246,23 @@ class Game:
     def _available_robots(self):
         return [r for r in self.state['robots'] if not r.busy]
 
-    def _worker_count(self, job):
-        return len([r for r in self.state['robots'] if r.work == job])
+    def _worker_count(self, work):
+        return len([r for r in self.state['robots'] if r.work == work])
 
     def _refresh_display(self):
+        # Horribly inefficient
         total_robots = len(self.state['robots'])
-        foo          = self._worker_count('foo')
-        bar          = self._worker_count('bar')
-        foobar       = self._worker_count('foobar')
-        shopping     = self._worker_count('shopping')
-        selling      = self._worker_count('selling')
-        changing     = self._worker_count('changing')
+        unassigned   = self._worker_count(RobotWork.UNASSIGNED)
+        foo          = self._worker_count(RobotWork.FOO)
+        bar          = self._worker_count(RobotWork.BAR)
+        foobar       = self._worker_count(RobotWork.FOOBAR)
+        shopping     = self._worker_count(RobotWork.SHOPPING)
+        selling      = self._worker_count(RobotWork.SELLING)
+        changing     = self._worker_count(RobotWork.CHANGING)
 
-        assert foo + bar + foobar + shopping + selling + changing == total_robots
+        assert unassigned + foo + bar + foobar + shopping + selling + changing == total_robots
 
+        # Bad, but, zero dependencies.
         os.system(CLEAR_COMMAND)
         print(f'Total robots: {total_robots}\n')
         print(f'Mining foo: {foo}')
@@ -252,7 +270,7 @@ class Game:
         print(f'Mining foobar: {foobar}')
         print(f'Shopping: {shopping}')
         print(f'Selling foobars: {selling}')
-        print(f'Changing jobs: {changing}\n')
+        print(f'Changing work: {changing}\n')
 
         print({
             'foo':    self.state['foo'],
@@ -268,7 +286,7 @@ class Game:
         assert self.state['money'] >= 0
 
 
-INITIAL_GAME_STATE = [Robot(), Robot()]
+INITIAL_GAME_STATE = [Robot(RobotWork.FOO), Robot(RobotWork.FOO)]
 
 
 if __name__ == '__main__':
