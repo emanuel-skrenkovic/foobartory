@@ -14,13 +14,13 @@ else:
     CLEAR_COMMAND = 'clear'
 
 
-FPS                 = 60
+FPS                 = 30
 TIME_FACTOR         = .1
 FOOBAR_SUCCESS_RATE = 0.6
 
 
 class Event:
-    def __init__(self, duration, action, on_before, on_after=None):
+    def __init__(self, duration, action, on_before, on_after):
         self.duration  = duration * TIME_FACTOR
         self.action    = action
         self.on_before = on_before
@@ -36,8 +36,7 @@ class Event:
 
         def run_action():
             self.action()
-            if self.on_after is not None:
-                self.on_after()
+            self.on_after()
 
         timer = Timer(self.duration, run_action)
         timer.start()
@@ -168,12 +167,9 @@ class Game:
         }
 
     def run(self):
-        last_frame_time = time.time()
-
         # simple game loop
         while not self._win_condition():
             current_time = time.time()
-            # dt = current_time - last_frame_time
             last_frame_time = current_time
 
             sleep_time = 1./FPS - (current_time - last_frame_time)
@@ -229,7 +225,7 @@ class Game:
             if robot.events:
                 # Treat robot events as a stack.
                 # Works well in case of changing work,
-                # WOrk change and the next work are pushed to the stack.
+                # Work change and the next work are pushed to the stack.
                 # First the work change will be executed, then the work.
                 event = robot.events.pop(0)
                 task = event.run()
@@ -262,7 +258,7 @@ class Game:
 
         assert unassigned + foo + bar + foobar + shopping + selling + changing == total_robots
 
-        # Bad, but, zero dependencies.
+        # Bad, but zero dependencies.
         os.system(CLEAR_COMMAND)
         print(f'Total robots: {total_robots}\n')
         print(f'Mining foo: {foo}')
