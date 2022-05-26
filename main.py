@@ -100,9 +100,9 @@ class Robot:
         )
 
     def sell_foobars(self, state):
-        state['foobar'] -= 5
-
         for _ in range(5):
+            state['foobar'] -= 1
+
             def action():
                 state['money'] += 1
 
