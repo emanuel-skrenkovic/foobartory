@@ -46,12 +46,12 @@ class Event:
 
 class RobotWork(Enum):
     UNASSIGNED = 0
-    FOO = 1,
-    BAR = 2,
-    FOOBAR = 3
-    SHOPPING = 4,
-    SELLING = 5,
-    CHANGING = 6
+    FOO        = 1
+    BAR        = 2
+    FOOBAR     = 3
+    SHOPPING   = 4
+    SELLING    = 5
+    CHANGING   = 6
 
 
 class Robot:
