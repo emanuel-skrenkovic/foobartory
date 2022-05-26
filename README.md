@@ -10,7 +10,7 @@ main.py contains a [shebang](https://en.wikipedia.org/wiki/Shebang_(Unix)), so s
 ./main.py
 ```
 
-If that does not work (also, to run on Windows):
+If that does not work:
 
 ``` sh
 python3 -m main
