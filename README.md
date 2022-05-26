@@ -21,5 +21,6 @@ python3 -m main
 * TIME_FACTOR - multiplier for all time-based actions in the game. 
 1 = real time, default value is 0.1 to avoid waiting for an eternity to see how the game progresses.
 * FOOBAR_SUCCESS_RATE - success rate of the foobar creation. Wanted to play around with some values so created a variable for it. Default value is 0.6 (60%) as per instructions.
+* MAX_ROBOTS - sets the end condition for the game. Once robots count reaches MAX_ROBOTS, the game is finished.
 
 To change the settings, simply change them in the main.py file. Obviously, this is python, so no compilation required between changes, which makes it simple to keep configuration in code.

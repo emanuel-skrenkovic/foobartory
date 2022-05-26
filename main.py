@@ -17,6 +17,7 @@ else:
 FPS                 = 30
 TIME_FACTOR         = .1
 FOOBAR_SUCCESS_RATE = 0.6
+MAX_ROBOTS          = 30
 
 
 class Event:
@@ -65,8 +66,7 @@ class Robot:
 
         self._schedule_event(
             RobotWork.FOO,
-            self._create_event(1, action),
-            state
+            self._create_event(1, action)
         )
 
     def bar(self, state):
@@ -76,8 +76,7 @@ class Robot:
         duration = round(random.uniform(0.5, 2.0), 1)
         self._schedule_event(
             RobotWork.BAR,
-            self._create_event(duration, action),
-            state
+            self._create_event(duration, action)
         )
 
     def foobar(self, state):
@@ -95,8 +94,7 @@ class Robot:
 
         self._schedule_event(
             RobotWork.FOOBAR,
-            self._create_event(2, action),
-            state
+            self._create_event(2, action)
         )
 
     def sell_foobars(self, state):
@@ -108,8 +106,7 @@ class Robot:
 
             self._schedule_event(
                 RobotWork.SELLING,
-                self._create_event(2, action),
-                state
+                self._create_event(2, action)
             )
 
     def buy_new_robot(self, state):
@@ -121,8 +118,7 @@ class Robot:
 
         self._schedule_event(
             RobotWork.SHOPPING,
-            self._create_event(1, action),
-            state
+            self._create_event(1, action)
         )
 
     # All methods below are candidates for moving
@@ -147,7 +143,7 @@ class Robot:
     def _after_action(self):
         self.busy = False
 
-    def _schedule_event(self, name, event, state):
+    def _schedule_event(self, name, event):
         if self.work != name:
             self._change_work(name)
 
@@ -237,7 +233,7 @@ class Game:
             return
 
     def _win_condition(self):
-        return len(self.state['robots']) >= 30
+        return len(self.state['robots']) >= MAX_ROBOTS
 
     def _available_robots(self):
         return [r for r in self.state['robots'] if not r.busy]
