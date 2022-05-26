@@ -272,10 +272,10 @@ class Game:
         })
 
     def _assert_state(self):
-        assert self.state['foo'] >= 0
-        assert self.state['foo'] >= 0
+        assert self.state['foo']    >= 0
+        assert self.state['foo']    >= 0
         assert self.state['foobar'] >= 0
-        assert self.state['money'] >= 0
+        assert self.state['money']  >= 0
 
 
 INITIAL_GAME_STATE = [Robot(RobotWork.FOO), Robot(RobotWork.FOO)]
